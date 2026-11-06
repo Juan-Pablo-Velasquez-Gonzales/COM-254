@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Nevera de vacunas sin corriente: EDO, Heun y RK4</title>
+<style>
+:root{--bg:#f3eee4;--card:#fffdf8;--tx:#2a2118;--mu:#6e6253;--bd:#ddd2bf;--ac:#1f6f5c;--c1:#1f6f5c;--c2:#b5481f;--c3:#5b3fa0;--warn:#b3261e;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1a1612;--card:#241e18;--tx:#efe6d8;--mu:#b3a58f;--bd:#3a3128;--ac:#5fc2a5;--c1:#5fc2a5;--c2:#f08a5d;--c3:#b9a3f5;--warn:#ff8a80}}
+:root[data-theme="dark"]{--bg:#1a1612;--card:#241e18;--tx:#efe6d8;--mu:#b3a58f;--bd:#3a3128;--ac:#5fc2a5;--c1:#5fc2a5;--c2:#f08a5d;--c3:#b9a3f5;--warn:#ff8a80}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:17px/1.6 Georgia,"Times New Roman",serif}
+main{max-width:920px;margin:0 auto;padding:16px}
+h1{font-size:1.9rem;margin:.3em 0;letter-spacing:-.5px;border-bottom:3px double var(--ac);padding-bottom:.3em}h2{font-size:1.1rem;margin:0 0 .6em;color:var(--ac);text-transform:uppercase;letter-spacing:1px;font-variant:small-caps}
+.card{background:var(--card);border:1px solid var(--bd);border-left:5px solid var(--ac);border-radius:3px;padding:16px 18px;margin:18px 0}
+.mu{color:var(--mu);font-size:.92rem}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+label{display:block;font-size:.85rem;color:var(--mu)}
+input{width:100%;padding:8px;border:0;border-bottom:2px solid var(--bd);border-radius:0;background:transparent;color:var(--tx);font-size:1.05rem;font-family:ui-monospace,Menlo,Consolas,monospace}input:focus{outline:0;border-bottom-color:var(--ac)}
+button{margin-top:14px;padding:11px 22px;border:2px solid var(--ac);border-radius:0;background:transparent;color:var(--ac);font:700 .95rem Georgia,serif;text-transform:uppercase;letter-spacing:1px}button:active{background:var(--ac);color:var(--card)}
+.err{color:var(--warn);font-weight:600}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.85rem;font-variant-numeric:tabular-nums}
+th,td{border-bottom:1px dotted var(--bd);padding:5px 8px;text-align:right;white-space:nowrap}tr:nth-child(even) td{background:var(--bg)}
+th:first-child,td:first-child{text-align:left}
+th{color:var(--mu)}
+code,.eq{font-family:ui-monospace,Menlo,Consolas,monospace;background:var(--bg);padding:1px 5px;border-radius:5px}
+.eq{display:block;padding:8px 10px;margin:6px 0;overflow-x:auto}
+svg{width:100%;height:auto;display:block}
+.leg span{margin-right:14px;font-size:.85rem;white-space:nowrap}
+.leg i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:4px;vertical-align:-1px}
+</style>
+</head>
+<body>
+<main>
+<h1>Nevera de vacunas sin corriente</h1>
+<p class="mu">Métodos Numéricos · Desafío individual · EDO de primer orden con condición inicial · Heun, RK4 y solución analítica</p>
+
+<section class="card">
+<h2>1. Problema y contexto</h2>
+<p><b>Desafío:</b> “Cadena de frío en el puesto de salud rural”. Un puesto de salud comunitario guarda vacunas en una nevera aislada que debe mantenerse entre 2 °C y 8 °C. Cuando se corta la luz, la nevera se calienta lentamente hacia la temperatura ambiente.</p>
+<p><b>Población beneficiaria:</b> familias de la comunidad que dependen de vacunas del puesto de salud.</p>
+<p><b>Pregunta:</b> ¿cuántas horas puede resistir la nevera sin corriente antes de superar los 8 °C, y qué tan precisos son Heun y RK4 al estimarlo?</p>
+<p class="mu">Todos los parámetros son <b>hipotéticos</b> (no provienen de mediciones reales).</p>
+</section>
+
+<section class="card">
+<h2>2. Modelo matemático</h2>
+<p>Variable dependiente: <code>T(t)</code> temperatura interior (°C). Variable independiente: <code>t</code> tiempo (h). Parámetros: <code>Ta</code> temperatura ambiente (°C), <code>k</code> constante de transferencia de calor (1/h; menor k = mejor aislamiento).</p>
+<span class="eq">dT/dt = k·(Ta − T), T(0) = T₀</span>
+<p class="mu">Se justifica con la ley de enfriamiento de Newton: la rapidez de cambio es proporcional a la diferencia entre el exterior y el interior. Supuestos: Ta constante, temperatura interior uniforme, k constante, sin apertura de la puerta. Intervalo de simulación: 0 ≤ t ≤ t_máx.</p>
+</section>
+
+<section class="card">
+<h2>3. Solución analítica y verificación</h2>
+<p>La EDO es lineal y separable: ∫dT/(Ta−T) = ∫k dt → −ln|Ta−T| = kt + C. Con T(0)=T₀:</p>
+<span class="eq">T(t) = Ta + (T₀ − Ta)·e^(−kt)</span>
+<p><b>Verificación por sustitución:</b> T′(t) = −k(T₀−Ta)e^(−kt). Por otro lado, k(Ta−T) = k·[−(T₀−Ta)e^(−kt)] = −k(T₀−Ta)e^(−kt). Coinciden, luego T cumple la ecuación. Además T(0) = Ta + (T₀−Ta) = T₀, por lo que cumple la condición inicial.</p>
+<p><b>Tiempo para llegar a 8 °C:</b></p>
+<span class="eq">t* = (1/k)·ln[(Ta − T₀)/(Ta − 8)]</span>
+</section>
+
+<section class="card">
+<h2>4. Simulación</h2>
+<div class="grid">
+<div><label>T₀ (°C) condición inicial<input id="T0" type="number" step="any" value="4"></label></div>
+<div><label>Ta (°C) ambiente<input id="Ta" type="number" step="any" value="30"></label></div>
+<div><label>k (1/h)<input id="k" type="number" step="any" value="0.08"></label></div>
+<div><label>t máx (h)<input id="tm" type="number" step="any" value="12"></label></div>
+<div><label>Paso h (h)<input id="h" type="number" step="any" value="2"></label></div>
+<div><label>Paso h₂ (h) comparación<input id="h2" type="number" step="any" value="1"></label></div>
+</div>
+<button id="run">Ejecutar Heun y RK4</button>
+<p id="msg" class="err"></p>
+</section>
+
+<div id="out" hidden>
+<section class="card">
+<h2>5. Gráfica</h2>
+<div class="leg"><span><i style="background:var(--c1)"></i>Analítica</span><span><i style="background:var(--c2)"></i>Heun</span><span><i style="background:var(--c3)"></i>RK4</span><span><i style="background:var(--warn)"></i>Límite 8 °C</span></div>
+<div id="chart"></div>
+</section>
+
+<section class="card">
+<h2>6. Tabla comparativa (paso h)</h2>
+<p class="mu">Error absoluto = |T_analítica − T_numérica|. Error relativo (%) = error absoluto / |T_analítica| · 100.</p>
+<div class="scroll"><table id="tbl"></table></div>
+</section>
+
+<section class="card">
+<h2>7. Comparación de dos tamaños de paso (en t = t máx)</h2>
+<div class="scroll"><table id="cmp"></table></div>
+</section>
+
+<section class="card">
+<h2>8. Interpretación y conclusiones</h2>
+<div id="interp"></div>
+<p class="mu"><b>Limitaciones:</b> el modelo supone ambiente constante, aislamiento uniforme y puerta cerrada. En la práctica la temperatura ambiente varía durante el día y abrir la nevera acelera el calentamiento. Los resultados son simulaciones con parámetros hipotéticos, no predicciones comprobadas con datos reales.</p>
+</section>
+</div>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+function f(t,y,P){return P.k*(P.Ta-y)}
+function exact(t,P){return P.Ta+(P.T0-P.Ta)*Math.exp(-P.k*t)}
+function heun(P,h,n){const y=[P.T0];for(let i=0;i<n;i++){const t=i*h,a=y[i],k1=f(t,a,P),k2=f(t+h,a+h*k1,P);y.push(a+h/2*(k1+k2))}return y}
+function rk4(P,h,n){const y=[P.T0];for(let i=0;i<n;i++){const t=i*h,a=y[i],k1=f(t,a,P),k2=f(t+h/2,a+h/2*k1,P),k3=f(t+h/2,a+h/2*k2,P),k4=f(t+h,a+h*k3,P);y.push(a+h/6*(k1+2*k2+2*k3+k4))}return y}
+const E=x=>x===0?"0":x.toExponential(2);
+const F=x=>x.toFixed(4);
+function read(){
+ const P={T0:+$("T0").value,Ta:+$("Ta").value,k:+$("k").value,tm:+$("tm").value,h:+$("h").value,h2:+$("h2").value};
+ for(const key in P){if(!isFinite(P[key])||$(key==="tm"?"tm":key).value==="")return["Completa todos los campos con números."]}
+ if(P.k<=0)return["k debe ser mayor que 0 (1/h)."];
+ if(P.tm<=0)return["El tiempo máximo debe ser mayor que 0 h."];
+ if(P.h<=0||P.h2<=0)return["Los pasos h y h₂ deben ser mayores que 0."];
+ if(P.h>P.tm||P.h2>P.tm)return["Los pasos no pueden superar el tiempo máximo."];
+ if(P.tm/Math.min(P.h,P.h2)>5000)return["Demasiados pasos (máx. 5000). Aumenta h o reduce t máx."];
+ if(P.T0<-30||P.T0>60||P.Ta<-30||P.Ta>60)return["Las temperaturas deben estar entre −30 y 60 °C."];
+ return[null,P]}
+function steps(P,h){const n=Math.round(P.tm/h);return n}
+function run(){
+ const[e,P]=read();$("msg").textContent=e||"";
+ if(e){$("out").hidden=true;return}
+ let note="";
+ const n=steps(P,P.h),n2=steps(P,P.h2);
+ if(Math.abs(n*P.h-P.tm)>1e-9||Math.abs(n2*P.h2-P.tm)>1e-9)note="Aviso: t máx no es múltiplo exacto del paso; se simula hasta el múltiplo más cercano.";
+ $("msg").textContent=note;$("msg").style.fontWeight="400";
+ const H=heun(P,P.h,n),R=rk4(P,P.h,n),ts=[...Array(n+1).keys()].map(i=>i*P.h);
+ // tabla
+ let rows="<tr><th>t (h)</th><th>T exacta (°C)</th><th>Heun (°C)</th><th>RK4 (°C)</th><th>Err abs Heun</th><th>Err abs RK4</th><th>Err rel Heun (%)</th><th>Err rel RK4 (%)</th></tr>";
+ ts.forEach((t,i)=>{const x=exact(t,P),eh=Math.abs(x-H[i]),er=Math.abs(x-R[i]);
+  rows+=`<tr><td>${+t.toFixed(4)}</td><td>${F(x)}</td><td>${F(H[i])}</td><td>${F(R[i])}</td><td>${E(eh)}</td><td>${E(er)}</td><td>${x===0?"—":E(eh/Math.abs(x)*100)}</td><td>${x===0?"—":E(er/Math.abs(x)*100)}</td></tr>`});
+ $("tbl").innerHTML=rows;
+ // comparación de pasos
+ const fin=(h,nn)=>{const a=heun(P,h,nn),b=rk4(P,h,nn),x=exact(nn*h,P);return{h,x,eh:Math.abs(x-a[nn]),er:Math.abs(x-b[nn]),rh:x===0?NaN:Math.abs(x-a[nn])/Math.abs(x)*100,rr:x===0?NaN:Math.abs(x-b[nn])/Math.abs(x)*100}};
+ const c1=fin(P.h,n),c2=fin(P.h2,n2);
+ let ct="<tr><th>Paso h (h)</th><th>Err abs Heun</th><th>Err abs RK4</th><th>Err rel Heun (%)</th><th>Err rel RK4 (%)</th></tr>";
+ [c1,c2].forEach(c=>ct+=`<tr><td>${c.h}</td><td>${E(c.eh)}</td><td>${E(c.er)}</td><td>${isNaN(c.rh)?"—":E(c.rh)}</td><td>${isNaN(c.rr)?"—":E(c.rr)}</td></tr>`);
+ $("cmp").innerHTML=ct;
+ chart(P,ts,H,R);
+ interp(P,ts,H,R,c1,c2);
+ $("out").hidden=false}
+function chart(P,ts,H,R){
+ const W=700,Ht=360,L=48,B=40,T=14,Rr=14,tm=ts[ts.length-1];
+ const ys=[];for(let i=0;i<=100;i++)ys.push(exact(tm*i/100,P));
+ ys.push(P.T0,8,2,...H,...R);
+ let lo=Math.min(...ys),hi=Math.max(...ys);const pad=(hi-lo)*.08||1;lo-=pad;hi+=pad;
+ const X=t=>L+(t/tm)*(W-L-Rr),Y=y=>Ht-B-((y-lo)/(hi-lo))*(Ht-B-T);
+ let s=`<svg viewBox="0 0 ${W} ${Ht}" role="img" aria-label="Temperatura contra tiempo"><g font-size="12" fill="currentColor" style="fill:var(--mu)">`;
+ for(let i=0;i<=5;i++){const y=lo+(hi-lo)*i/5;s+=`<line x1="${L}" x2="${W-Rr}" y1="${Y(y)}" y2="${Y(y)}" stroke="var(--bd)"/><text x="${L-6}" y="${Y(y)+4}" text-anchor="end">${y.toFixed(1)}</text>`}
+ for(let i=0;i<=6;i++){const t=tm*i/6;s+=`<text x="${X(t)}" y="${Ht-B+16}" text-anchor="middle">${+t.toFixed(2)}</text>`}
+ s+=`<text x="${(W+L)/2}" y="${Ht-6}" text-anchor="middle">Tiempo t (h)</text><text transform="translate(12 ${Ht/2}) rotate(-90)" text-anchor="middle">Temperatura T (°C)</text></g>`;
+ s+=`<line x1="${L}" x2="${W-Rr}" y1="${Y(8)}" y2="${Y(8)}" stroke="var(--warn)" stroke-dasharray="6 4" stroke-width="1.5"/>`;
+ s+=`<polyline fill="none" stroke="var(--c1)" stroke-width="2.5" points="${ys.slice(0,101).map((y,i)=>X(tm*i/100)+","+Y(y)).join(" ")}"/>`;
+ s+=`<polyline fill="none" stroke="var(--c2)" stroke-width="1.5" points="${ts.map((t,i)=>X(t)+","+Y(H[i])).join(" ")}"/>`;
+ s+=`<polyline fill="none" stroke="var(--c3)" stroke-width="1.5" stroke-dasharray="3 3" points="${ts.map((t,i)=>X(t)+","+Y(R[i])).join(" ")}"/>`;
+ if(ts.length<=80)ts.forEach((t,i)=>{s+=`<circle cx="${X(t)}" cy="${Y(H[i])}" r="4" fill="var(--c2)"/><rect x="${X(t)-3}" y="${Y(R[i])-3}" width="6" height="6" fill="var(--c3)"/>`});
+ $("chart").innerHTML=s+"</svg>"}
+function interp(P,ts,H,R,c1,c2){
+ let h="";
+ const tstar=(P.Ta>8&&P.T0<8)?Math.log((P.Ta-P.T0)/(P.Ta-8))/P.k:null;
+ const cross=a=>{for(let i=1;i<a.length;i++)if(a[i-1]<8&&a[i]>=8)return ts[i-1]+(8-a[i-1])/(a[i]-a[i-1])*(ts[i]-ts[i-1]);return null};
+ if(tstar===null){
+  h+=`<p>Con estos datos la temperatura nunca cruza de abajo hacia arriba los 8 °C (revisa que T₀ &lt; 8 °C y Ta &gt; 8 °C para responder la pregunta del desafío).</p>`;
+ }else{
+  const ch=cross(H),cr=cross(R);
+  h+=`<p><b>Respuesta a la pregunta:</b> según la solución analítica, la nevera supera los 8 °C a las <b>${tstar.toFixed(3)} h</b> (≈ ${Math.round(tstar*60)} minutos). Para la comunidad esto significa que, tras un corte de luz, el personal de salud tiene aproximadamente ese tiempo para restablecer la energía o trasladar las vacunas a otra nevera (por ejemplo, una con respaldo solar).</p>`;
+  if(ch!==null&&cr!==null)h+=`<p>Estimación numérica por interpolación lineal con h = ${P.h} h: Heun ${ch.toFixed(3)} h (diferencia ${Math.abs(ch-tstar).toExponential(2)} h), RK4 ${cr.toFixed(3)} h (diferencia ${Math.abs(cr-tstar).toExponential(2)} h). Parte de esa diferencia viene de interpolar, no solo del método.</p>`;
+  else h+=`<p>Dentro de t máx = ${P.tm} h los métodos no alcanzan 8 °C (el tiempo exacto es ${tstar.toFixed(3)} h); aumenta t máx para verlo.</p>`;
+ }
+ const best=c1.er<c1.eh?"RK4":(c1.er>c1.eh?"Heun":"ambos igual");
+ h+=`<p><b>Precisión:</b> con h = ${c1.h} h, el error absoluto final fue ${E(c1.eh)} °C para Heun y ${E(c1.er)} °C para RK4; el método de menor error fue <b>${best}</b>. Con h₂ = ${c2.h} h los errores pasaron a ${E(c2.eh)} °C (Heun) y ${E(c2.er)} °C (RK4).</p>`;
+ if(c1.eh>0&&c2.eh>0&&c1.h!==c2.h){const p=Math.log(c1.eh/c2.eh)/Math.log(c1.h/c2.h);h+=`<p>Al cambiar el paso, el orden de convergencia observado de Heun es ≈ ${p.toFixed(2)} (teórico: 2).`;
+  if(c1.er>0&&c2.er>0){const q=Math.log(c1.er/c2.er)/Math.log(c1.h/c2.h);h+=` El de RK4 es ≈ ${q.toFixed(2)} (teórico: 4).`}h+=`</p>`}
+ h+=`<p>En lenguaje sencillo: ambos métodos sirven para este problema, pero RK4 da resultados mucho más cercanos al valor exacto, y reducir el paso mejora a los dos.</p>`;
+ $("interp").innerHTML=h}
+$("run").addEventListener("click",run);
+run();
+</script>
+</body>
+</html>
